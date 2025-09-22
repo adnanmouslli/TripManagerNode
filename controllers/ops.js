@@ -816,76 +816,167 @@ async function getAllBuses(req, res) {
     res.status(500).json({ error: "Failed to fetch buses" });
   }
 }
+
+
+// async function getSeatMap(req, res) {
+//   try {
+//     const tripId = toId(req.params.tripId);
+
+//     // جيب الرحلة مع busType.id (لو ما عندك trip.busTypeId كسكالار)
+//     const trip = await prisma.trip.findUnique({
+//       where: { id: tripId },
+//       include: { busType: { select: { id: true } } },
+//     });
+//     if (!trip) return res.status(404).json({ message: "Trip not found" });
+
+//     // استخرج busTypeId من السكالار إن وجد، وإلا من العلاقة
+//     const busTypeId = Number(trip.busTypeId ?? trip.busType?.id);
+//     if (!busTypeId) {
+//       return res.status(500).json({ message: "Trip busType not resolved" });
+//     }
+
+//     // كل مقاعد نوع الباص
+//     const seats = await prisma.seat.findMany({
+//       where: { busTypeId },
+//       orderBy: [{ row: "asc" }, { col: "asc" }],
+//     });
+
+//     // حجوزات الرحلة الحالية - عبر العلاقة (بدون tripId scalar)
+//     const reservations = await prisma.reservation.findMany({
+//       where: { trip: { id: tripId } },
+//       select: {
+//         id: true,
+//         passengerName: true,
+//         seat: { select: { id: true } },
+//       },
+//     });
+
+//     // خريطة المقاعد المحجوزة key=seat.id
+//     const reservedMap = new Map();
+//     for (const r of reservations) {
+//       const sid = Number(r.seat?.id);
+//       if (sid) reservedMap.set(sid, r);
+//     }
+
+//     const result = {
+//       tripId: trip.id.toString(),
+//       busTypeId,
+//       seats: seats.map((s) => {
+//         const r = reservedMap.get(s.id);
+//         return r
+//           ? {
+//               seatId: s.id,
+//               row: s.row,
+//               col: s.col,
+//               reserved: true,
+//               reservationId: r.id.toString(),
+//               passengerName: r.passengerName,
+//             }
+//           : {
+//               seatId: s.id,
+//               row: s.row,
+//               col: s.col,
+//               reserved: false,
+//             };
+//       }),
+//     };
+
+//     res.json(result);
+//   } catch (e) {
+//     res
+//       .status(500)
+//       .json({ message: "Error building seat map", error: e.message });
+//   }
+// }
 async function getSeatMap(req, res) {
   try {
     const tripId = toId(req.params.tripId);
 
-    // جيب الرحلة مع busType.id (لو ما عندك trip.busTypeId كسكالار)
     const trip = await prisma.trip.findUnique({
       where: { id: tripId },
-      include: { busType: { select: { id: true } } },
+      include: {
+        busType: {
+          select: {
+            id: true,
+            rows: true,
+            leftSeats: true,
+            rightSeats: true,
+            lastRowSeats: true,
+          },
+        },
+      },
     });
     if (!trip) return res.status(404).json({ message: "Trip not found" });
 
-    // استخرج busTypeId من السكالار إن وجد، وإلا من العلاقة
     const busTypeId = Number(trip.busTypeId ?? trip.busType?.id);
     if (!busTypeId) {
       return res.status(500).json({ message: "Trip busType not resolved" });
     }
 
-    // كل مقاعد نوع الباص
     const seats = await prisma.seat.findMany({
       where: { busTypeId },
       orderBy: [{ row: "asc" }, { col: "asc" }],
-    });
-
-    // حجوزات الرحلة الحالية - عبر العلاقة (بدون tripId scalar)
-    const reservations = await prisma.reservation.findMany({
-      where: { trip: { id: tripId } },
       select: {
         id: true,
-        passengerName: true,
-        seat: { select: { id: true } },
+        row: true,
+        col: true,
+        number: true,
+        status: true,
       },
     });
 
-    // خريطة المقاعد المحجوزة key=seat.id
+    const reservations = await prisma.reservation.findMany({
+      where: { tripId },
+      select: {
+        id: true,
+        passengerName: true,
+        seatId: true,
+      },
+    });
+
+    // ✅ Map بدون typing (JS)
     const reservedMap = new Map();
     for (const r of reservations) {
-      const sid = Number(r.seat?.id);
-      if (sid) reservedMap.set(sid, r);
+      reservedMap.set(r.seatId, r);
     }
 
     const result = {
       tripId: trip.id.toString(),
       busTypeId,
+      layout: {
+        rows: trip.busType.rows,
+        leftSeats: trip.busType.leftSeats,
+        rightSeats: trip.busType.rightSeats,
+        lastRowSeats: trip.busType.lastRowSeats,
+      },
       seats: seats.map((s) => {
         const r = reservedMap.get(s.id);
-        return r
-          ? {
-              seatId: s.id,
-              row: s.row,
-              col: s.col,
-              reserved: true,
-              reservationId: r.id.toString(),
-              passengerName: r.passengerName,
-            }
-          : {
-              seatId: s.id,
-              row: s.row,
-              col: s.col,
-              reserved: false,
-            };
+        return {
+          seatId: s.id,
+          row: s.row,
+          col: s.col,
+          number: s.number,
+          status: r ? "reserved" : s.status,
+          ...(r && {
+            reservationId: r.id.toString(),
+            passengerName: r.passengerName,
+          }),
+        };
       }),
     };
 
-    res.json(result);
+    return res.json(result);
   } catch (e) {
-    res
-      .status(500)
-      .json({ message: "Error building seat map", error: e.message });
+    console.error("Error in getSeatMap:", e);
+    return res.status(500).json({
+      message: "Error building seat map",
+      error: e.message || String(e),
+    });
   }
 }
+
+
+
 module.exports = {
   getTripById,
   getAllTrips,

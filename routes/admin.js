@@ -28,8 +28,9 @@ router.patch("/users/:id", admin.updateUser);
 /* BUS TYPES & SEAT MAP */
 router.post("/bus-types", admin.createBusType);
 router.get("/bus-types", admin.listBusTypes);
-router.post("/bus-types/:id/seat-map/grid", admin.generateSeatMapGrid);
+router.post("/bus-types/:id/seat-map/grid",admin.generateSeatMapGrid);
 router.get("/bus-types/:id/seats", admin.listSeatsByBusType);
+router.patch("/seats/:id/status", admin.toggleSeatStatus);
 
 /* TRIPS (READ) */
 router.get("/trips", admin.listTrips);

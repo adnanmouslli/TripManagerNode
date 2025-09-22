@@ -46,54 +46,139 @@ async function listBusTypes(req, res) {
   }
 }
 
-/* ✅ توليد خريطة المقاعد */
-async function generateSeatMapGrid(req, res) {
+/* ✅ توليد خريطة المقاعد مرنة */
+// async function generateSeatMapGrid(req, res) {
+//   try {
+//     const busTypeId = parseInt(req.params.id, 10);
+
+//     const { rows, leftSeats, rightSeats, lastRowSeats } = req.body;
+//     if (!rows || !leftSeats || !rightSeats || !lastRowSeats) {
+//       return res
+//         .status(400)
+//         .json({
+//           message: "rows, leftSeats, rightSeats, lastRowSeats required",
+//         });
+//     }
+
+//     // ✅ تحقق من الحجوزات
+//     const linkedReservations = await prisma.reservation.count({
+//       where: { seat: { busTypeId } },
+//     });
+//     if (linkedReservations > 0) {
+//       return res.status(400).json({
+//         message: "لا يمكن إعادة توليد المقاعد لأن هناك حجوزات مرتبطة",
+//       });
+//     }
+
+//     await prisma.seat.deleteMany({ where: { busTypeId } });
+
+//     const data = [];
+//     let counter = 1;
+
+//     // 🟢 الصفوف الوسطية
+//     for (let r = 1; r < rows; r++) {
+//       // يسار
+//       for (let c = 1; c <= leftSeats; c++) {
+//         data.push({ busTypeId, row: r, col: c, number: counter++ });
+//       }
+
+//       // يمين (بخلي أعمدتهم تبدأ بعد الممر)
+//       for (let c = 1; c <= rightSeats; c++) {
+//         data.push({
+//           busTypeId,
+//           row: r,
+//           col: leftSeats + 1 + c, // +1 للممر
+//           number: counter++,
+//         });
+//       }
+//     }
+
+//     // 🟢 الصف الأخير
+//     const lastRow = rows;
+//     for (let c = 1; c <= lastRowSeats; c++) {
+//       data.push({ busTypeId, row: lastRow, col: c, number: counter++ });
+//     }
+
+//     await prisma.seat.createMany({ data, skipDuplicates: true });
+
+//     res.json({
+//       message: "Seat map generated (flexible layout)",
+//       rows,
+//       created: data.length,
+//     });
+//   } catch (e) {
+//     res
+//       .status(500)
+//       .json({ message: "Error generating seat map", error: e.message });
+//   }
+// }
+ async function generateSeatMapGrid(req, res) {
+  const busTypeId = parseInt(req.params.id, 10);
+  const { rows, leftSeats, rightSeats, lastRowSeats } = req.body;
+
   try {
-    const busTypeId = parseInt(req.params.id, 10);
-    const { rows, cols } = req.body;
-
-    if (!rows || !cols) {
-      return res.status(400).json({ message: "rows and cols required" });
-    }
-
-    // ✅ احذف المقاعد القديمة إذا ما فيها حجوزات
-    const linkedReservations = await prisma.reservation.count({
-      where: { seat: { busTypeId } },
+    // 🟢 تحديث إعدادات الباص
+    await prisma.busType.update({
+      where: { id: busTypeId },
+      data: {
+        rows,
+        leftSeats,
+        rightSeats,
+        lastRowSeats,
+      },
     });
-    if (linkedReservations > 0) {
-      return res
-        .status(400)
-        .json({
-          message: "لا يمكن إعادة توليد المقاعد لأن هناك حجوزات مرتبطة",
-        });
-    }
 
+    // 🟢 حذف المقاعد القديمة (إذا موجودة) وإعادة توليدهم
     await prisma.seat.deleteMany({ where: { busTypeId } });
 
-    const data = [];
-    let counter = 1;
+    let seatNumber = 1;
     for (let r = 1; r <= rows; r++) {
-      for (let c = 1; c <= cols; c++) {
-        data.push({ busTypeId, row: r, col: c });
-        counter++;
+      // يسار
+      for (let c = 1; c <= leftSeats; c++) {
+        await prisma.seat.create({
+          data: {
+            number: seatNumber++,
+            row: r,
+            col: c,
+            status: "available",
+            busTypeId,
+          },
+        });
+      }
+      // يمين
+      for (let c = 1; c <= rightSeats; c++) {
+        await prisma.seat.create({
+          data: {
+            number: seatNumber++,
+            row: r,
+            col: leftSeats + c,
+            status: "available",
+            busTypeId,
+          },
+        });
       }
     }
 
-    await prisma.seat.createMany({ data, skipDuplicates: true });
+    // الصف الأخير
+    for (let c = 1; c <= lastRowSeats; c++) {
+      await prisma.seat.create({
+        data: {
+          number: seatNumber++,
+          row: rows + 1,
+          col: c,
+          status: "available",
+          busTypeId,
+        },
+      });
+    }
 
-    res.json({
-      message: "Seat map generated",
-      rows,
-      cols,
-      created: data.length,
-    });
+    res.json({ message: "✅ تم توليد المقاعد وحفظ التخطيط" });
   } catch (e) {
     res
       .status(500)
       .json({ message: "Error generating seat map", error: e.message });
   }
 }
-
 
 /* ✅ جلب المقاعد لباص */
 async function listSeatsByBusType(req, res) {
@@ -112,9 +197,38 @@ async function listSeatsByBusType(req, res) {
   }
 }
 
+/* ✅ تغيير حالة مقعد */
+async function toggleSeatStatus(req, res) {
+  try {
+    const seatId = parseInt(req.params.id, 10);
+    const { status } = req.body;
+
+    // التحقق من القيم المسموح بها
+    if (!["available", "blocked", "reserved", "held"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    // تحديث حالة المقعد
+    const seat = await prisma.seat.update({
+      where: { id: seatId },
+      data: { status },
+    });
+
+    res.json({ message: "Seat status updated", seat });
+  } catch (e) {
+    console.error("Error toggling seat status:", e);
+    res.status(500).json({ message: "Error updating seat", error: e.message });
+  }
+}
+
+// ✅ توليد المقاعد مع حفظ التخطيط
+
+
+
 module.exports = {
   createBusType,
   listBusTypes,
   generateSeatMapGrid,
   listSeatsByBusType,
+  toggleSeatStatus,
 };

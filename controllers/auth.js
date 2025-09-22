@@ -52,11 +52,11 @@ async function signup(req, res) {
 
 async function login(req, res) {
   try {
-    const { phone, password } = req.body;
-    const user = await prisma.user.findFirst({ where: { phone } });
+    const { name, password } = req.body; // 👈 بدال phone صار name
+    const user = await prisma.user.findFirst({ where: { name } }); // 👈 البحث بالـ name
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return res.status(401).json({
-        message: "Invalid phone or password",
+        message: "Invalid name or password",
         timestamp: new Date().toISOString(),
       });
     }
@@ -78,7 +78,6 @@ async function login(req, res) {
       data: { refreshTokens: { push: refreshToken } },
     });
 
-    // ✅ تعديل الرد: رجّع بيانات المستخدم
     res.json({
       message: "Login successful",
       accessToken,
@@ -100,6 +99,7 @@ async function login(req, res) {
     });
   }
 }
+
 
 async function refresh(req, res) {
   try {

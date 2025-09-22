@@ -1,5 +1,3 @@
-// prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -9,6 +7,7 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ✅ الأدوار
 enum UserRole {
   admin
   booking
@@ -16,6 +15,7 @@ enum UserRole {
   ops
 }
 
+// ✅ حالة الرحلة
 enum TripStatus {
   scheduled
   boarding
@@ -24,23 +24,26 @@ enum TripStatus {
   completed
 }
 
-enum SeatStatus {
-  available
-  held
-  reserved
-  blocked
-}
-
+// ✅ الجنس
 enum Gender {
   M
   F
 }
 
+// ✅ طرق المسح
 enum ScanMethod {
   manual
   qr
   nfc
   other
+}
+
+// ✅ حالة المقاعد
+enum SeatStatus {
+  available
+  held
+  reserved
+  blocked
 }
 
 model User {
@@ -52,6 +55,8 @@ model User {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   refreshTokens String[]     @default([])
+
+  // العلاقات
   trips         Trip[]        @relation("TripCreator")
   reservations  Reservation[] @relation("ReservationCreator")
   securityLogs  SecurityLog[] @relation("LogRecorder")
@@ -61,20 +66,30 @@ model BusType {
   id         Int      @id @default(autoincrement())
   name       String   @db.VarChar(80)
   seatCount  Int
+
+  // ✅ الحقول الجديدة لتخطيط الباص
+  rows        Int?
+  leftSeats   Int?
+  rightSeats  Int?
+  lastRowSeats Int?
+
+  // العلاقات
   seats      Seat[]
   trips      Trip[]
 }
 
 model Seat {
-  id            Int       @id @default(autoincrement())
-  busTypeId     Int
-  busType       BusType   @relation(fields: [busTypeId], references: [id])
-  row           Int
-  col           Int
-  tripSeats     TripSeat[]
-  reservations  Reservation[]
+  id        Int        @id @default(autoincrement())
+  busTypeId Int
+  row       Int
+  col       Int
+  number    Int
+  status    SeatStatus @default(available)  // ✅ حالة المقعد
 
-  @@unique([busTypeId, row, col])
+  // العلاقات
+  busType     BusType   @relation(fields: [busTypeId], references: [id])
+  tripSeats   TripSeat[]
+  reservations Reservation[]
 }
 
 model Trip {
@@ -92,6 +107,7 @@ model Trip {
   createdAt        DateTime    @default(now())
   updatedAt        DateTime    @updatedAt
 
+  // العلاقات
   tripSeats     TripSeat[]
   reservations  Reservation[]
   securityLogs  SecurityLog[]
@@ -100,9 +116,10 @@ model Trip {
 model TripSeat {
   tripId  BigInt
   seatId  Int
-  trip    Trip       @relation(fields: [tripId], references: [id])
-  seat    Seat       @relation(fields: [seatId], references: [id])
-  status  SeatStatus @default(available)
+  status  SeatStatus @default(available)  // ✅ حالة المقعد على مستوى الرحلة
+
+  trip    Trip @relation(fields: [tripId], references: [id])
+  seat    Seat @relation(fields: [seatId], references: [id])
 
   @@id([tripId, seatId])
 }
@@ -110,9 +127,7 @@ model TripSeat {
 model Reservation {
   id            BigInt    @id @default(autoincrement())
   tripId        BigInt
-  trip          Trip      @relation(fields: [tripId], references: [id])
   seatId        Int
-  seat          Seat      @relation(fields: [seatId], references: [id])
   passengerName String    @db.VarChar(120)
   phone         String?   @db.VarChar(40)
   boardingPoint String?   @db.VarChar(120)
@@ -120,20 +135,20 @@ model Reservation {
   paid          Boolean   @default(false)
   amount        Decimal  
   createdBy     BigInt
-  creator       User      @relation("ReservationCreator", fields: [createdBy], references: [id])
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // العلاقات
+  trip          Trip      @relation(fields: [tripId], references: [id])
+  seat          Seat      @relation(fields: [seatId], references: [id])
+  creator       User      @relation("ReservationCreator", fields: [createdBy], references: [id])
   securityLogs  SecurityLog[]
 }
 
 model SecurityLog {
   id            BigInt      @id @default(autoincrement())
   tripId        BigInt
-  trip          Trip        @relation(fields: [tripId], references: [id])
   reservationId BigInt?
-  reservation   Reservation? @relation(fields: [reservationId], references: [id])
-
   nationalId    String      @db.VarChar(20)
   firstName     String      @db.VarChar(60)
   lastName      String      @db.VarChar(60)
@@ -147,6 +162,10 @@ model SecurityLog {
   notes         String?     @db.VarChar(255)
   recordedAt    DateTime    @default(now())
   recordedBy    BigInt
+
+  // العلاقات
+  trip          Trip        @relation(fields: [tripId], references: [id])
+  reservation   Reservation? @relation(fields: [reservationId], references: [id])
   recorder      User        @relation("LogRecorder", fields: [recordedBy], references: [id])
 
   @@index([tripId, recordedAt])
