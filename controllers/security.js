@@ -1,6 +1,6 @@
 // controllers/security.js (CommonJS)
 
-const { PrismaClient, Gender } = require("@prisma/client");
+const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { toJSON, getUid } = require("./_utils");
 
@@ -125,15 +125,14 @@ async function createSecurityLog(req, res) {
       fatherName,
       motherName,
       birthDate,
-      gender, // "M" | "F"
       issuePlace,
       phone,
       notes,
     } = req.body;
 
-    if (!tripId || !nationalId || !firstName || !lastName || !gender) {
+    if (!tripId || !nationalId || !firstName || !lastName) {
       return res.status(400).json({
-        message: "tripId, nationalId, firstName, lastName, gender are required",
+        message: "tripId, nationalId, firstName, lastName are required",
       });
     }
 
@@ -160,11 +159,6 @@ async function createSecurityLog(req, res) {
       reservationConnect = { connect: { id: rId } };
     }
 
-    let genderEnum;
-    if (gender === "M") genderEnum = Gender.M;
-    else if (gender === "F") genderEnum = Gender.F;
-    else return res.status(400).json({ message: "Invalid gender" });
-
     const log = await prisma.securityLog.create({
       data: {
         trip: { connect: { id: tripPk } },
@@ -176,7 +170,6 @@ async function createSecurityLog(req, res) {
         fatherName: fatherName ?? null,
         motherName: motherName ?? null,
         birthDate: birthDate ? new Date(birthDate) : null,
-        gender: genderEnum,
         issuePlace: issuePlace ?? null,
         phone: phone ?? null,
         notes: notes ?? null,
@@ -205,7 +198,6 @@ async function updateSecurityLog(req, res) {
       fatherName,
       motherName,
       birthDate,
-      gender,
       issuePlace,
       phone,
       notes,
@@ -218,13 +210,6 @@ async function updateSecurityLog(req, res) {
     if (!log)
       return res.status(404).json({ message: "Security log not found" });
 
-    let genderEnum;
-    if (gender !== undefined) {
-      if (gender === "M") genderEnum = Gender.M;
-      else if (gender === "F") genderEnum = Gender.F;
-      else return res.status(400).json({ message: "Invalid gender" });
-    }
-
     const data = {};
     if (nationalId !== undefined) data.nationalId = nationalId;
     if (firstName !== undefined) data.firstName = firstName;
@@ -233,7 +218,6 @@ async function updateSecurityLog(req, res) {
     if (motherName !== undefined) data.motherName = motherName ?? null;
     if (birthDate !== undefined)
       data.birthDate = birthDate ? new Date(birthDate) : null;
-    if (genderEnum !== undefined) data.gender = genderEnum;
     if (issuePlace !== undefined) data.issuePlace = issuePlace ?? null;
     if (phone !== undefined) data.phone = phone ?? null;
     if (notes !== undefined) data.notes = notes ?? null;
@@ -294,6 +278,7 @@ async function getAllTrips(req, res) {
     res.status(500).json({ error: "Failed to fetch trips" });
   }
 }
+
 module.exports = {
   listSecurityLogs,
   getSecurityLog,

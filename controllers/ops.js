@@ -321,16 +321,21 @@ async function getTripPaymentsSummary(req, res) {
 }
 
 // POST /api/ops/trips/:tripId/passengers  (اسم فقط، بدون دفع/صعود)
+// POST /api/ops/trips/:tripId/passengers  (إضافة حجز مع البيانات الأساسية)
 async function addPassenger(req, res) {
   try {
     const uid = getUid(req);
     const tripId = toId(req.params.tripId);
-    const { passengerName, seatId } = req.body;
+    const { passengerName, seatId, boardingPoint, amount } = req.body;
 
-    if (!passengerName)
-      return res.status(400).json({ message: "passengerName is required" });
+    // ✅ تحقق من الحقول المطلوبة
+    if (!passengerName || !boardingPoint || amount === undefined) {
+      return res.status(400).json({
+        message: "passengerName, boardingPoint, amount are required",
+      });
+    }
 
-    // التحقق من المقعد (اختياري) ومن انتمائه لنوع الباص للرحلة:
+    // التحقق من المقعد (اختياري)
     let seatConnect = undefined;
     if (seatId !== undefined && seatId !== null) {
       const trip = await prisma.trip.findUnique({
@@ -349,36 +354,41 @@ async function addPassenger(req, res) {
           .json({ message: "Seat does not belong to trip's bus type" });
       }
 
-      // تأكد أنه غير محجوز لنفس الرحلة
+      // تأكد أن المقعد غير محجوز مسبقاً
       const exists = await prisma.reservation.findFirst({
-        where: { trip: { id: tripId }, seat: { id: Number(seatId) } },
+        where: { tripId, seatId: Number(seatId) },
       });
-      if (exists)
+      if (exists) {
         return res
           .status(409)
           .json({ message: "Seat already reserved for this trip" });
+      }
 
       seatConnect = { connect: { id: Number(seatId) } };
     }
 
+    // ✅ إنشاء الحجز
     const reservation = await prisma.reservation.create({
       data: {
         trip: { connect: { id: tripId } },
         seat: seatConnect,
         passengerName,
-        paid: false,
-        amount: 0,
+        boardingPoint,
+        amount: Number(amount), // المبلغ المدفوع
+        paid: Number(amount) > 0, // إذا في مبلغ > 0 اعتبره مدفوع
         creator: { connect: { id: uid } },
       },
     });
 
     res.status(201).json(toJSON(reservation));
   } catch (e) {
-    res
-      .status(500)
-      .json({ message: "Failed to add passenger", error: e.message });
+    res.status(500).json({
+      message: "Failed to add passenger",
+      error: e.message,
+    });
   }
 }
+
 
 const fonts = {
   Arabic: {
@@ -394,162 +404,6 @@ const fonts = {
 // GET /api/ops/trips/:tripId/report.pdf
 const printer = new PdfPrinter(fonts);
 
-//   try {
-//     const { tripId, userId } = req.body;
-
-//     // تحقق من صلاحية المستخدم
-//     const user = await prisma.user.findUnique({
-//       where: { id: Number(userId) },
-//     });
-//     if (!user || user.role !== "ops") {
-//       return res
-//         .status(403)
-//         .json({ error: "Only ops users can view trip reports" });
-//     }
-
-//     // جلب بيانات الرحلة
-//     const trip = await prisma.trip.findUnique({
-//       where: { id: BigInt(tripId) },
-//       select: {
-//         originLabel: true,
-//         destinationLabel: true,
-//         driverName: true,
-//         departureDt: true,
-//         reservations: {
-//           select: {
-//             passengerName: true,
-//             amount: true,
-//             boardingPoint: true,
-//           },
-//         },
-//       },
-//     });
-
-//     if (!trip) return res.status(404).json({ error: "Trip not found" });
-
-//     // احصاءات
-//     const byAmount = {};
-//     trip.reservations.forEach((r) => {
-//       const amt = Number(r.amount); // تحويل Decimal إلى number
-//       if (!byAmount[amt]) byAmount[amt] = 0;
-//       byAmount[amt] += 1;
-//     });
-
-//     const byProvince = {}; // إضافة هذا الجزء
-//     trip.reservations.forEach((r) => {
-//       const province = r.boardingPoint || "غير محدد";
-//       if (!byProvince[province]) byProvince[province] = 0;
-//       byProvince[province] += 1;
-//     });
-
-//     // تعريف محتوى التقرير
-//     const docDefinition = {
-//       content: [
-//         { text: " الرحلة تقرير ", style: "header", alignment: "center" },
-//         { text: "\n" },
-
-//         // معلومات الرحلة
-//         {
-//           columns: [
-//             {
-//               text: `${trip.destinationLabel || "غير محدد"} : إلى`,
-//               alignment: "right",
-//             },
-//             {
-//               text: `${trip.originLabel || "غير محدد"} : من`,
-//               alignment: "right",
-//             },
-//           ],
-//           margin: [0, 2, 0, 2],
-//         },
-//         {
-//           text: `${trip.driverName || "غير محدد"} : السائق `,
-//           alignment: "right",
-//           margin: [0, 2, 0, 2],
-//         },
-//         {
-//           text: `${trip.departureDt || "غير محدد"} : الرحلة تاريخ`,
-//           alignment: "right",
-//           margin: [0, 2, 0, 2],
-//         },
-//         {
-//           text: `${trip.reservations.length || 0} : الركاب إجمالي `,
-//           alignment: "right",
-//           margin: [0, 2, 0, 10],
-//         },
-
-//         // جدول الركاب حسب المحافظة
-//         {
-//           text: "  المحافظة حسب الركاب عدد ",
-//           style: "subheader",
-//           alignment: "center",
-//           margin: [0, 5, 0, 5],
-//         },
-//         {
-//           table: {
-//             headerRows: 1,
-//             widths: ["*", "*"],
-//             body: [
-//               ["المحافظة", "الركاب عدد "],
-//               ...Object.entries(byProvince).map(([prov, count]) => [
-//                 prov,
-//                 count,
-//               ]),
-//             ],
-//           },
-//           layout: "lightHorizontalLines",
-//           margin: [0, 0, 0, 10],
-//         },
-
-//         // جدول الركاب حسب المبلغ المدفوع
-//         {
-//           text: " المدفوع المبلغ حسب الركاب عدد ",
-//           style: "subheader",
-//           alignment: "center",
-//           margin: [0, 5, 0, 5],
-//         },
-//         {
-//           table: {
-//             headerRows: 1,
-//             widths: ["*", "*"],
-//             body: [
-//               ["المدفوع المبلغ ", "الركاب عدد "],
-//               ...Object.entries(byAmount).map(([amount, count]) => [
-//                 amount,
-//                 count,
-//               ]),
-//             ],
-//           },
-//           layout: "lightHorizontalLines",
-//           margin: [0, 0, 0, 10],
-//         },
-//       ],
-
-//       defaultStyle: {
-//         font: "Arabic",
-//         fontSize: 12,
-//       },
-
-//       styles: {
-//         header: { fontSize: 18, bold: true },
-//         subheader: { fontSize: 14, bold: true },
-//       },
-//     };
-
-//     // إنشاء الـ PDF
-//     const pdfDoc = printer.createPdfKitDocument(docDefinition);
-//     res.setHeader("Content-Type", "application/pdf");
-//     res.setHeader(
-//       "Content-Disposition",
-//       `attachment; filename=trip_${tripId}_report.pdf`
-//     );
-//     pdfDoc.pipe(res);
-//     pdfDoc.end();
-//   } catch (err) {
-//     console.error("Error generating trip PDF:", err);
-//     res.status(500).json({ error: "Failed to generate trip PDF" });
-//   }
-// }
 // controllers/ops.js
 
 async function generateTripReportPDF(req, res) {
@@ -974,6 +828,63 @@ async function getSeatMap(req, res) {
     });
   }
 }
+// GET /api/ops/trips/:tripId/reservations
+async function getTripReservations(req, res) {
+  try {
+    const tripId = toId(req.params.tripId);
+
+   const reservations = await prisma.reservation.findMany({
+     where: { tripId },
+     select: {
+       id: true,
+       passengerName: true,
+       phone: true,
+       boardingPoint: true,
+       notes: true,
+       paid: true,
+       amount: true,
+       seat: { select: { id: true, row: true, col: true } },
+     },
+     orderBy: [{ id: "asc" }],
+   });
+
+   // ✅ حوّلي BigInt → String
+   const safeReservations = JSON.parse(
+     JSON.stringify(reservations, (_, value) =>
+       typeof value === "bigint" ? value.toString() : value
+     )
+   );
+
+   res.json(safeReservations);
+
+
+    res.json(
+      reservations.map((r) => ({
+        id: r.id.toString(),
+        passengerName: r.passengerName,
+        phone: r.phone,
+        boardingPoint: r.boardingPoint,
+        notes: r.notes,
+        paid: r.paid,
+        amount: r.amount,
+        createdAt: r.createdAt,
+        seat: r.seat
+          ? {
+              row: r.seat.row,
+              col: r.seat.col,
+              number: r.seat.number,
+            }
+          : null,
+        creator: r.creator ? { id: r.creator.id, name: r.creator.name } : null,
+      }))
+    );
+  } catch (e) {
+    console.error("Error fetching reservations:", e);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch reservations", error: e.message });
+  }
+}
 
 
 
@@ -990,5 +901,6 @@ module.exports = {
   generateReservationTicketPDF,
   getAllBuses,
   getSeatMap,
+  getTripReservations,
 };
 

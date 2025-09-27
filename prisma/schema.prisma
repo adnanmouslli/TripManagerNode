@@ -149,16 +149,14 @@ model SecurityLog {
   id            BigInt      @id @default(autoincrement())
   tripId        BigInt
   reservationId BigInt?
-  nationalId    String      @db.VarChar(20)
+  nationalId    String      @db.VarChar(20)   // ✅ أبقينا الرقم الوطني
   firstName     String      @db.VarChar(60)
   lastName      String      @db.VarChar(60)
   fatherName    String?     @db.VarChar(60)
   motherName    String?     @db.VarChar(60)
   birthDate     DateTime?   @db.Date
-  gender        Gender
   issuePlace    String?     @db.VarChar(80)
   phone         String?     @db.VarChar(40)
-  scanMethod    ScanMethod  @default(manual)
   notes         String?     @db.VarChar(255)
   recordedAt    DateTime    @default(now())
   recordedBy    BigInt
