@@ -320,7 +320,6 @@ async function getTripPaymentsSummary(req, res) {
   }
 }
 
-// POST /api/ops/trips/:tripId/passengers  (اسم فقط، بدون دفع/صعود)
 // POST /api/ops/trips/:tripId/passengers  (إضافة حجز مع البيانات الأساسية)
 async function addPassenger(req, res) {
   try {

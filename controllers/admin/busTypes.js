@@ -112,6 +112,8 @@ async function listBusTypes(req, res) {
 //       .json({ message: "Error generating seat map", error: e.message });
 //   }
 // }
+
+
  async function generateSeatMapGrid(req, res) {
   const busTypeId = parseInt(req.params.id, 10);
   const { rows, leftSeats, rightSeats, lastRowSeats } = req.body;
@@ -145,6 +147,7 @@ async function listBusTypes(req, res) {
           },
         });
       }
+      
       // يمين
       for (let c = 1; c <= rightSeats; c++) {
         await prisma.seat.create({
@@ -187,7 +190,8 @@ async function listSeatsByBusType(req, res) {
 
     const seats = await prisma.seat.findMany({
       where: { busTypeId },
-      orderBy: [{ row: "asc" }, { col: "asc" }],
+      orderBy: [
+        { row: "asc" }, { col: "asc" }],
     });
 
     res.json(seats);

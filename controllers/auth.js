@@ -11,14 +11,15 @@ async function signup(req, res) {
         .status(400)
         .json({ message: "Invalid role", timestamp: new Date().toISOString() });
     }
-    const existingUser = await prisma.user.findFirst({ where: { phone } });
+    const existingUser = await prisma.user.findFirst({ where: { name } });
     if (existingUser) {
       return res.status(400).json({
-        message: "User with this phone already exists",
+        message: "User with this name already exists",
         timestamp: new Date().toISOString(),
       });
     }
     const hashedPassword = await bcrypt.hash(password, 12);
+    
     const user = await prisma.user.create({
       data: { name, phone, role, passwordHash: hashedPassword },
     });
