@@ -53,8 +53,8 @@ async function signup(req, res) {
 
 async function login(req, res) {
   try {
-    const { name, password } = req.body; // 👈 بدال phone صار name
-    const user = await prisma.user.findFirst({ where: { name } }); // 👈 البحث بالـ name
+    const { name, password } = req.body;
+    const user = await prisma.user.findFirst({ where: { name } });
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return res.status(401).json({
         message: "Invalid name or password",
