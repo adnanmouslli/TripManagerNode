@@ -8,7 +8,7 @@ const booking = require("../controllers/booking");
 const router = express.Router();
 
 // 🔒 حماية كل المسارات لموظف الحجز المسبق (أو الأدمن)
-router.use(verifyAccessToken, checkRole(["booking", "admin"]));
+router.use(verifyAccessToken);
 router.get("/bus",booking.getAllBuses);
 /* ========= TRIPS ========= */
 router.post("/trips", booking.createTrip);
